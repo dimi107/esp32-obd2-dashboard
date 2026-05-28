@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>OBD Dashboard Preview – 480×320</title>
+        <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+
+            body {
+                background: #111827;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+                padding: 32px;
+                gap: 20px;
+            }
+
+            h1 {
+                color: #64748b;
+                font-size: 12px;
+                font-weight: 400;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+
+            .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+            .ctrl-btn {
+                background: #1e293b;
+                border: 1px solid #334155;
+                color: #94a3b8;
+                font-size: 11px;
+                padding: 6px 14px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .ctrl-btn:hover { background: #334155; color: #e2e8f0; }
+            .ctrl-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+
+            .frame {
+                border-radius: 12px;
+                overflow: hidden;
+                box-shadow: 0 0 0 2px #334155, 0 0 0 4px #0f172a, 0 24px 80px rgba(0,0,0,0.9);
+            }
+
+            .screen {
+                width: 480px;
+                height: 320px;
+                background: #0f172a;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                font-family: "Segoe UI", system-ui, sans-serif;
+                position: relative;
+            }
+
+            /* ── Tab bar ── */
+            .tabbar {
+                height: 36px;
+                min-height: 36px;
+                background: #0a1020;
+                display: flex;
+                align-items: stretch;
+                border-bottom: 1px solid #1e3a5f;
+                position: relative;
+                flex-shrink: 0;
+                padding-right: 58px;
+            }
+            .tab-btn {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #475569;
+                cursor: pointer;
+                border-bottom: 2px solid transparent;
+                transition: color 0.12s;
+                user-select: none;
+            }
+            .tab-btn:hover { color: #94a3b8; }
+            .tab-btn.active { color: #f1f5f9; border-bottom-color: #3b82f6; }
+            .tab-label { font-size: 11px; letter-spacing: 0.06em; }
+            .obd-badge {
+                position: absolute;
+                right: 6px;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: 10px;
+                letter-spacing: 0.05em;
+                pointer-events: none;
+                white-space: nowrap;
+            }
+
+            /* ── Content area ── */
+            .content { flex: 1; background: #0f172a; position: relative; overflow: hidden; }
+            .panel { display: none; width: 100%; height: 100%; }
+            .panel.active { display: block; }
+
+            /* ── Metric grid ── */
+            .grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: 1fr 1fr;
+                gap: 3px;
+                padding: 3px;
+                height: 100%;
+            }
+            .tile {
+                background: #1e293b;
+                border: 1px solid #2d3f55;
+                border-radius: 6px;
+                padding: 5px 6px 4px;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                position: relative;
+            }
+            .tile-hdr { font-size: 12px; color: #64748b; white-space: nowrap; line-height: 1; margin-bottom: 1px; }
+
+            /* Arc tile */
+            .arc-wrap { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+            .arc-center { position: absolute; text-align: center; pointer-events: none; }
+            .arc-num { font-size: 24px; font-weight: 300; line-height: 1.1; }
+            .arc-name { font-size: 12px; color: #64748b; margin-top: 2px; letter-spacing: 0.04em; }
+
+            /* Value tile */
+            .val-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+            .big-num { font-size: 46px; font-weight: 300; line-height: 1; }
+            .big-unit { font-size: 13px; color: #64748b; }
+            .val-name { font-size: 12px; color: #64748b; text-align: center; padding-bottom: 3px; letter-spacing: 0.04em; }
+
+            /* ── Faults tab ── */
+            .faults-wrap { height: 100%; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+            .btn-row { display: flex; justify-content: space-between; }
+            .scan-btn, .clear-btn {
+                height: 34px; border: none; border-radius: 5px;
+                font-size: 14px; font-weight: 600; letter-spacing: 0.05em;
+                cursor: pointer; padding: 0 16px;
+            }
+            .scan-btn  { background: #3b82f6; color: #fff; width: 148px; }
+            .clear-btn { background: #7f1d1d; color: #fca5a5; width: 148px; }
+            .scan-btn:hover  { background: #2563eb; }
+            .clear-btn:hover { background: #991b1b; }
+            .dtc-status { font-size: 14px; text-align: center; color: #64748b; flex-shrink: 0; }
+            .dtc-list {
+                flex: 1; background: #0f172a; border: 1px solid #334155;
+                border-radius: 6px; overflow-y: auto; overflow-x: hidden;
+            }
+            .dtc-item { padding: 8px 10px; border-bottom: 1px solid #1e293b; display: flex; gap: 10px; align-items: baseline; font-size: 14px; }
+            .dtc-item:last-child { border-bottom: none; }
+            .dtc-code { color: #ef4444; font-weight: 700; min-width: 52px; font-size: 15px; }
+            .dtc-desc { color: #cbd5e1; }
+            .dtc-ok { padding: 10px; color: #22c55e; font-size: 14px; }
+            .dtc-list::-webkit-scrollbar { width: 4px; }
+            .dtc-list::-webkit-scrollbar-track { background: #0f172a; }
+            .dtc-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+            /* ── Settings tab ── */
+            .settings-wrap {
+                height: 100%; padding: 12px 14px;
+                display: flex; flex-direction: column; gap: 10px;
+            }
+            .settings-row {
+                display: flex; align-items: center; justify-content: space-between;
+                background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+                padding: 10px 14px;
+            }
+            .settings-label-text { font-size: 14px; color: #e2e8f0; }
+            .lang-btns { display: flex; gap: 6px; }
+            .lang-btn {
+                height: 30px; padding: 0 18px;
+                border: 1px solid #334155; border-radius: 4px;
+                background: #0f172a; color: #64748b;
+                font-size: 13px; font-weight: 700; cursor: pointer;
+                letter-spacing: 0.06em; transition: all 0.12s;
+            }
+            .lang-btn:hover { background: #1e293b; color: #94a3b8; }
+            .lang-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+
+            /* Odometer row */
+            .odo-val { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+        </style>
+    </head>
+    <body>
+        <h1>OBD Dashboard Preview &nbsp;·&nbsp; 480 × 320 px &nbsp;·&nbsp; click tabs or scenario buttons</h1>
+
+        <div class="controls">
+            <button class="ctrl-btn active" onclick="setScenario('normal')">Normal driving</button>
+            <button class="ctrl-btn" onclick="setScenario('warn')">⚠ Coolant warning</button>
+            <button class="ctrl-btn" onclick="setScenario('oillow')">⚠ Oil level low</button>
+            <button class="ctrl-btn" onclick="setScenario('fault')">✕ Fault codes</button>
+            <button class="ctrl-btn" onclick="setScenario('idle')">Engine off / no OBD</button>
+        </div>
+
+        <div class="frame">
+            <div class="screen">
+                <div class="tabbar">
+                    <div class="tab-btn active" id="tb0" onclick="showTab(0)"><span class="tab-label" id="tl-0">MAIN</span></div>
+                    <div class="tab-btn" id="tb1" onclick="showTab(1)"><span class="tab-label" id="tl-1">INFO 1</span></div>
+                    <div class="tab-btn" id="tb2" onclick="showTab(2)"><span class="tab-label" id="tl-2">INFO 2</span></div>
+                    <div class="tab-btn" id="tb3" onclick="showTab(3)"><span class="tab-label" id="tl-3">DTC</span></div>
+                    <div class="tab-btn" id="tb4" onclick="showTab(4)"><span class="tab-label" id="tl-4">SET</span></div>
+                    <div class="obd-badge" id="obd-badge" style="color:#22c55e">OBD ●</div>
+                </div>
+
+                <div class="content">
+
+                    <!-- ── MAIN (0-3): RPM · Speed · Coolant · Oil Temp ── -->
+                    <div class="panel active" id="tab-0">
+                        <div class="grid">
+                            <div class="tile">
+                                <div class="arc-wrap">
+                                    <div id="arc-rpm"></div>
+                                    <div class="arc-center">
+                                        <div class="arc-num" id="v-rpm" style="color:#22c55e">3200</div>
+                                        <div class="arc-name" id="an-rpm">RPM</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="tile" style="justify-content:space-between">
+                                <div class="val-body">
+                                    <div class="big-num" id="v-speed" style="color:#22c55e">85</div>
+                                    <div class="big-unit">km/h</div>
+                                </div>
+                                <div class="val-name" id="vn-speed">Speed</div>
+                            </div>
+
+                            <div class="tile">
+                                <div class="arc-wrap">
+                                    <div id="arc-cool"></div>
+                                    <div class="arc-center" style="transform:translateX(-10px)">
+                                        <div class="arc-num" id="v-cool" style="color:#22c55e">92</div>
+                                        <div class="arc-name" id="an-cool">Coolant °C</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="tile">
+                                <div class="arc-wrap">
+                                    <div id="arc-oilt"></div>
+                                    <div class="arc-center">
+                                        <div class="arc-num" id="v-oilt" style="color:#22c55e">98</div>
+                                        <div class="arc-name" id="an-oilt">Oil °C</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── INFO 1 (4-7): Fuel · Oil Level · Intake Pres · Battery ── -->
+                    <div class="panel" id="tab-1">
+                        <div class="grid">
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-fuel">Fuel</div>
+                                <div class="arc-wrap">
+                                    <div id="arc-fuel"></div>
+                                    <div class="arc-center">
+                                        <div class="arc-num" id="v-fuel" style="color:#22c55e">28</div>
+                                        <div class="arc-name">L</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-oillvl">Oil Level</div>
+                                <div class="arc-wrap">
+                                    <div id="arc-oillvl"></div>
+                                    <div class="arc-center">
+                                        <div class="arc-num" id="v-oillvl" style="color:#22c55e">100</div>
+                                        <div class="arc-name">%</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-map">Intake Pres</div>
+                                <div class="arc-wrap">
+                                    <div id="arc-map"></div>
+                                    <div class="arc-center">
+                                        <div class="arc-num" id="v-map" style="color:#22c55e">1.02</div>
+                                        <div class="arc-name">bar</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-batt">Battery</div>
+                                <div class="val-body">
+                                    <div class="big-num" id="v-batt" style="color:#22c55e">14.2</div>
+                                    <div class="big-unit">V</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── INFO 2 (8-11): Intake Air · Fuel Trim · Ign. Timing · Eng. Load ── -->
+                    <div class="panel" id="tab-2">
+                        <div class="grid">
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-iat">Intake Air</div>
+                                <div class="arc-wrap">
+                                    <div id="arc-iat"></div>
+                                    <div class="arc-center">
+                                        <div class="arc-num" id="v-iat" style="color:#22c55e">24</div>
+                                        <div class="arc-name">°C</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-ft">Fuel Trim</div>
+                                <div class="val-body">
+                                    <div class="big-num" id="v-ft" style="color:#22c55e">+1.5</div>
+                                    <div class="big-unit">%</div>
+                                </div>
+                            </div>
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-tim">Ign. Timing</div>
+                                <div class="val-body">
+                                    <div class="big-num" id="v-tim" style="color:#22c55e">18.5</div>
+                                    <div class="big-unit">°</div>
+                                </div>
+                            </div>
+                            <div class="tile">
+                                <div class="tile-hdr" id="hdr-load">Eng. Load</div>
+                                <div class="val-body">
+                                    <div class="big-num" id="v-load" style="color:#22c55e">42</div>
+                                    <div class="big-unit">%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── DTC (FAULTS) ── -->
+                    <div class="panel" id="tab-3">
+                        <div class="faults-wrap">
+                            <div class="btn-row">
+                                <button class="scan-btn" id="scan-btn">SCAN CODES</button>
+                                <button class="clear-btn" id="clear-btn">CLEAR CODES</button>
+                            </div>
+                            <div class="dtc-status" id="dtc-status">Tap SCAN CODES to read fault codes</div>
+                            <div class="dtc-list" id="dtc-list">
+                                <div class="dtc-ok">No fault codes stored – system OK</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── SETTINGS ── -->
+                    <div class="panel" id="tab-4">
+                        <div class="settings-wrap">
+                            <div class="settings-row">
+                                <span class="settings-label-text" id="lang-label">Language</span>
+                                <div class="lang-btns">
+                                    <button class="lang-btn active" id="lang-btn-en" onclick="applyLanguage('en')">EN</button>
+                                    <button class="lang-btn" id="lang-btn-bg" onclick="applyLanguage('bg')">BG</button>
+                                </div>
+                            </div>
+                            <div class="settings-row">
+                                <span class="settings-label-text">ODO (DME)</span>
+                                <span class="odo-val" id="odo-val" style="color:#22c55e">148,432 km</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // ── Arc SVG renderer ────────────────────────────────────────────
+            function arcSVG(pct, color, size) {
+                size = size || 118;
+                const r = size * 0.36, cx = size / 2, cy = size / 2;
+                const circ = 2 * Math.PI * r, sweep = 0.75 * circ, gap = 0.25 * circ, sw = size * 0.1;
+                const p = Math.max(0, Math.min(1, pct));
+                const ind = p * sweep, indGap = circ - ind;
+                const rot = `rotate(225, ${cx}, ${cy})`;
+                return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#2d3f55"
+    stroke-width="${sw}" stroke-dasharray="${sweep.toFixed(1)} ${gap.toFixed(1)}"
+    transform="${rot}" stroke-linecap="butt"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}"
+    stroke-width="${sw}" stroke-dasharray="${ind.toFixed(1)} ${indGap.toFixed(1)}"
+    transform="${rot}" stroke-linecap="round"/>
+</svg>`;
+            }
+
+            function col(val, warnH, critH, warnL, critL) {
+                if (critH  !== undefined && val >= critH)  return "#ef4444";
+                if (warnH  !== undefined && val >= warnH)  return "#f59e0b";
+                if (critL  !== undefined && val <= critL)  return "#ef4444";
+                if (warnL  !== undefined && val <= warnL)  return "#f59e0b";
+                return "#22c55e";
+            }
+            function pct(val, min, max) { return (val - min) / (max - min); }
+
+            // ── Render scenario data ─────────────────────────────────────────
+            function render(d) {
+                const sz = 118;
+                let c;
+
+                // MAIN tab
+                c = col(d.rpm, 6500, 7500);
+                document.getElementById("arc-rpm").innerHTML = arcSVG(pct(d.rpm, 0, 8000), c, sz);
+                document.getElementById("v-rpm").textContent = d.rpm.toFixed(0);
+                document.getElementById("v-rpm").style.color = c;
+
+                document.getElementById("v-speed").textContent = d.speed.toFixed(0);
+
+                c = col(d.cool, 100, 110);
+                document.getElementById("arc-cool").innerHTML = arcSVG(pct(d.cool, 40, 130), c, sz);
+                document.getElementById("v-cool").textContent = d.cool.toFixed(0);
+                document.getElementById("v-cool").style.color = c;
+
+                c = col(d.oilT, 130, 150);
+                document.getElementById("arc-oilt").innerHTML = arcSVG(pct(d.oilT, 40, 160), c, sz);
+                document.getElementById("v-oilt").textContent = d.oilT.toFixed(0);
+                document.getElementById("v-oilt").style.color = c;
+
+                // INFO 1 tab
+                c = col(d.fuel, undefined, undefined, 10, 5);
+                document.getElementById("arc-fuel").innerHTML = arcSVG(pct(d.fuel, 0, 40), c, sz);
+                document.getElementById("v-fuel").textContent = d.fuel.toFixed(0);
+                document.getElementById("v-fuel").style.color = c;
+
+                c = col(d.oilLvl, undefined, undefined, 30, 15);
+                document.getElementById("arc-oillvl").innerHTML = arcSVG(pct(d.oilLvl, 0, 100), c, sz);
+                document.getElementById("v-oillvl").textContent = d.oilLvl.toFixed(0);
+                document.getElementById("v-oillvl").style.color = c;
+
+                c = col(d.map, 230, 270);
+                document.getElementById("arc-map").innerHTML = arcSVG(pct(d.map, 0, 300), c, sz);
+                document.getElementById("v-map").textContent = (d.map / 100).toFixed(2);
+                document.getElementById("v-map").style.color = c;
+
+                c = col(d.batt, undefined, undefined, 11.8, 11.0);
+                document.getElementById("v-batt").textContent = d.batt.toFixed(1);
+                document.getElementById("v-batt").style.color = c;
+
+                // INFO 2 tab
+                c = col(d.iat, 50);
+                document.getElementById("arc-iat").innerHTML = arcSVG(pct(d.iat, -20, 70), c, sz);
+                document.getElementById("v-iat").textContent = d.iat.toFixed(0);
+                document.getElementById("v-iat").style.color = c;
+
+                c = col(d.ft, 15, 20, -15, -20);
+                document.getElementById("v-ft").textContent = (d.ft >= 0 ? "+" : "") + d.ft.toFixed(1);
+                document.getElementById("v-ft").style.color = c;
+
+                c = col(d.timing, undefined, undefined, 5, 0);
+                document.getElementById("v-tim").textContent = d.timing.toFixed(1);
+                document.getElementById("v-tim").style.color = c;
+
+                document.getElementById("v-load").textContent = d.engLoad.toFixed(0);
+                document.getElementById("v-load").style.color = "#22c55e";
+
+                // OBD status badge
+                const badge = document.getElementById("obd-badge");
+                badge.textContent = d.connected ? "OBD ●" : "NO OBD";
+                badge.style.color  = d.connected ? "#22c55e" : "#ef4444";
+
+                // DTC list
+                const list   = document.getElementById("dtc-list");
+                const status = document.getElementById("dtc-status");
+                list.innerHTML = "";
+                if (!d.dtcs || d.dtcs.length === 0) {
+                    status.textContent = "System OK — 0 fault codes";
+                    status.style.color = "#22c55e";
+                    list.innerHTML = '<div class="dtc-ok">No fault codes stored – system OK</div>';
+                } else {
+                    status.textContent = d.dtcs.length + " fault code" + (d.dtcs.length > 1 ? "s" : "") + " found";
+                    status.style.color = "#ef4444";
+                    d.dtcs.forEach(dtc => {
+                        list.innerHTML += `<div class="dtc-item"><span class="dtc-code">${dtc[0]}</span><span class="dtc-desc">${dtc[1]}</span></div>`;
+                    });
+                }
+
+                // Odometer (DME only)
+                const odoVal = document.getElementById("odo-val");
+                if (d.odom != null) {
+                    odoVal.textContent = d.odom.toLocaleString() + " km";
+                    odoVal.style.color = "#22c55e";
+                } else {
+                    odoVal.textContent = "-- km";
+                    odoVal.style.color = "#64748b";
+                }
+            }
+
+            // ── Language strings ─────────────────────────────────────────────
+            const LANG_DATA = {
+                en: {
+                    tabs:    ["MAIN", "INFO 1", "INFO 2", "DTC", "SET"],
+                    m:       ["RPM","Speed","Coolant","Oil","Fuel","Oil Level","Intake Pres","Battery","Intake Air","Fuel Trim","Ign. Timing","Eng. Load"],
+                    scan: "SCAN CODES", clear: "CLEAR CODES", langLabel: "Language"
+                },
+                bg: {
+                    tabs:    ["ГЛАВНА", "ИНФО 1", "ИНФО 2", "ГРЕШКИ", "НАСТР."],
+                    m:       ["Обороти","Скорост","Охлад.","Масло","Гориво","Ниво масло","Вх. налягане","Батерия","Вх. въздух","Рег. гор. смес","Момент запалване","Натоварване"],
+                    scan: "СКАНИРАЙ", clear: "ИЗЧИСТИ", langLabel: "Език"
+                }
+            };
+
+            function applyLanguage(lang) {
+                const L = LANG_DATA[lang];
+                L.tabs.forEach((t, i) => document.getElementById("tl-" + i).textContent = t);
+                document.getElementById("an-rpm").textContent    = L.m[0];
+                document.getElementById("vn-speed").textContent  = L.m[1];
+                document.getElementById("an-cool").textContent   = L.m[2] + " °C";
+                document.getElementById("an-oilt").textContent   = L.m[3] + " °C";
+                document.getElementById("hdr-fuel").textContent  = L.m[4];
+                document.getElementById("hdr-oillvl").textContent= L.m[5];
+                document.getElementById("hdr-map").textContent   = L.m[6];
+                document.getElementById("hdr-batt").textContent  = L.m[7];
+                document.getElementById("hdr-iat").textContent   = L.m[8];
+                document.getElementById("hdr-ft").textContent    = L.m[9];
+                document.getElementById("hdr-tim").textContent   = L.m[10];
+                document.getElementById("hdr-load").textContent  = L.m[11];
+                document.getElementById("scan-btn").textContent  = L.scan;
+                document.getElementById("clear-btn").textContent = L.clear;
+                document.getElementById("lang-label").textContent= L.langLabel;
+                document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("active"));
+                document.getElementById("lang-btn-" + lang).classList.add("active");
+            }
+
+            // ── Scenarios ────────────────────────────────────────────────────
+            const SCENARIOS = {
+                normal: {
+                    connected:true,
+                    rpm:3200, speed:85, cool:92, oilT:98,
+                    fuel:28, oilLvl:100, map:102, batt:14.2,
+                    iat:24, ft:1.5, timing:18.5, engLoad:42,
+                    dtcs:[], odom:148432
+                },
+                warn: {
+                    connected:true,
+                    rpm:4100, speed:102, cool:104, oilT:134,
+                    fuel:8, oilLvl:100, map:190, batt:13.8,
+                    iat:31, ft:2.1, timing:22.0, engLoad:68,
+                    dtcs:[], odom:148501
+                },
+                oillow: {
+                    connected:true,
+                    rpm:1200, speed:0, cool:91, oilT:95,
+                    fuel:22, oilLvl:5, map:97, batt:14.0,
+                    iat:22, ft:0.8, timing:16.0, engLoad:12,
+                    dtcs:[], odom:148510
+                },
+                fault: {
+                    connected:true,
+                    rpm:850, speed:0, cool:91, oilT:88,
+                    fuel:22, oilLvl:100, map:95, batt:13.9,
+                    iat:22, ft:-3.5, timing:8.0, engLoad:8,
+                    dtcs:[
+                        ["P0128","Coolant Below Thermostat Temp"],
+                        ["P0171","System Too Lean (Bank 1)"],
+                        ["P0420","Catalyst Efficiency Low (Bank 1)"]
+                    ],
+                    odom:148510
+                },
+                idle: {
+                    connected:false,
+                    rpm:0, speed:0, cool:0, oilT:0,
+                    fuel:0, oilLvl:0, map:0, batt:0,
+                    iat:0, ft:0, timing:0, engLoad:0,
+                    dtcs:[], odom:null
+                },
+            };
+
+            function setScenario(name) {
+                document.querySelectorAll(".ctrl-btn").forEach(b => b.classList.remove("active"));
+                event.target.classList.add("active");
+                if (name === "idle") {
+                    ["v-rpm","v-speed","v-cool","v-oilt","v-fuel","v-oillvl","v-map","v-batt","v-iat","v-ft","v-tim","v-load"]
+                        .forEach(id => { const el = document.getElementById(id); if (el) { el.textContent = "--"; el.style.color = "#64748b"; } });
+                    ["arc-rpm","arc-cool","arc-oilt","arc-fuel","arc-oillvl","arc-map","arc-iat"]
+                        .forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = arcSVG(0, "#2d3f55", 118); });
+                    document.getElementById("obd-badge").textContent = "NO OBD";
+                    document.getElementById("obd-badge").style.color = "#ef4444";
+                    document.getElementById("dtc-status").textContent = "No OBD connection";
+                    document.getElementById("dtc-status").style.color = "#64748b";
+                    document.getElementById("dtc-list").innerHTML = '<div class="dtc-ok" style="color:#64748b">Connect ELM327 to scan for faults</div>';
+                    document.getElementById("odo-val").textContent = "-- km";
+                    document.getElementById("odo-val").style.color = "#64748b";
+                } else {
+                    render(SCENARIOS[name]);
+                    if (name === "fault") showTab(3);
+                    if (name === "oillow") showTab(1);
+                }
+            }
+
+            function showTab(n) {
+                document.querySelectorAll(".tab-btn").forEach((b, i) => b.classList.toggle("active", i === n));
+                document.querySelectorAll(".panel").forEach((p, i) => p.classList.toggle("active", i === n));
+            }
+
+            render(SCENARIOS.normal);
+        </script>
+    </body>
+</html>
