@@ -85,6 +85,8 @@ static const DtcEntry DTC_TABLE[] = {
     {"P0238", "Turbocharger Boost Sensor High"},
     {"P0243", "Turbocharger Wastegate Solenoid A"},
     {"P0299", "Turbocharger Underboost Condition"},
+    {"P0299", "Turbocharger  Condition"},
+    {"P0299", "Turbocharger Underboost "},
     // Battery / charging
     {"P0560", "System Voltage Malfunction"},
     {"P0562", "System Voltage Low"},
