@@ -144,8 +144,9 @@ void obd_task(void* pvParameters) {
     int      fast_phase   = 0;   // 0=RPM, 1=Speed, 2=slow PID
     int      err_cnt      = 0;
     char     resp_buf[512];
-    int      pid_fail[NUM_PIDS] = {};
-    bool     pid_skip[NUM_PIDS] = {};
+    int      pid_fail[NUM_PIDS]    = {};
+    bool     pid_skip[NUM_PIDS]    = {};
+    bool     pid_ever_ok[NUM_PIDS] = {};  // true once a PID has succeeded at least once this session
     uint32_t pid_start_ms = 0;   // millis() when current PID polling started (stuck watchdog)
     int      odo_did_ok   = -1;  // index into ODO_DIDS that last worked; -1 = unknown
 
@@ -189,8 +190,9 @@ void obd_task(void* pvParameters) {
             slow_idx   = 1;
             fast_phase = 0;
             err_cnt    = 0;
-            memset(pid_fail, 0, sizeof(pid_fail));
-            memset(pid_skip, 0, sizeof(pid_skip));
+            memset(pid_fail,    0, sizeof(pid_fail));
+            memset(pid_skip,    0, sizeof(pid_skip));
+            memset(pid_ever_ok, 0, sizeof(pid_ever_ok));
             odo_did_ok = -1;
             state = POLL;
             break;
@@ -221,12 +223,18 @@ void obd_task(void* pvParameters) {
                 float val = POLL_FNS[poll_idx](elm);
                 if (elm.nb_rx_state == ELM_SUCCESS) {
                     write_pid(vd, poll_idx, val);
-                    pid_fail[poll_idx] = 0;
+                    pid_fail[poll_idx]    = 0;
+                    pid_ever_ok[poll_idx] = true;
                     err_cnt  = 0;
                     advance  = true;
                 } else if (elm.nb_rx_state != ELM_GETTING_MSG) {
-                    // Error response – count failure; clear stale value when PID is skipped
+                    // Error response – count failure.
+                    // If this PID worked earlier in the session, treat failure as a
+                    // connection regression and reconnect (batteryVoltage uses AT RV and
+                    // always "succeeds", which would otherwise mask OBD failures and
+                    // prevent err_cnt from reaching the reconnect threshold).
                     if (++pid_fail[poll_idx] >= PID_FAIL_THRESHOLD) {
+                        if (pid_ever_ok[poll_idx]) { state = RECONNECT; break; }
                         pid_skip[poll_idx] = true;
                         write_pid(vd, poll_idx, NAN);   // show "--" not stale reading
                     }
@@ -238,6 +246,7 @@ void obd_task(void* pvParameters) {
                     Serial.printf("[POLL] PID %d stuck >%ums, forcing advance\n",
                                   poll_idx, PID_STUCK_MS);
                     if (++pid_fail[poll_idx] >= PID_FAIL_THRESHOLD) {
+                        if (pid_ever_ok[poll_idx]) { state = RECONNECT; break; }
                         pid_skip[poll_idx] = true;
                         write_pid(vd, poll_idx, NAN);
                     }

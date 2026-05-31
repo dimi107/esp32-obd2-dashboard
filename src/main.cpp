@@ -36,11 +36,11 @@ void loop() {
 
     static uint32_t last_update = 0;
     uint32_t now = millis();
-    if (now - last_update >= 50) {
+    if (now - last_update >= 20) {
         last_update = now;
         VehicleValues snap = gVehicleData.snapshot();
         dashboard_update(snap);
     }
 
-    delay(5);
+    delay(2);
 }
