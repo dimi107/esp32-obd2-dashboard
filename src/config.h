@@ -41,7 +41,7 @@
 // ================================================================
 //  Fuel Tank Capacity  ← set to your car's tank size in litres
 // ================================================================
-#define FUEL_TANK_L  40   // MINI R56 = 40 L  (BMW F31 = 62 L)
+#define FUEL_TANK_L  40   // MINI Cooper R56 = 40 L  (BMW F31 = 62 L)
 
 // ================================================================
 //  Warning / Critical Thresholds
