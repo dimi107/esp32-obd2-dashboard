@@ -110,8 +110,7 @@ static void update_tile(int idx, float val) {
 
 // ── Build one metric tile ──────────────────────────────────────────────────
 static void build_tile(lv_obj_t* parent, int x, int y, int w, int h, int idx, bool main_style) {
-    const MetricDef& m   = METRICS[idx];
-    const char*      name = METRIC_NAMES[g_lang][idx];
+    const MetricDef& m = METRICS[idx];
 
     lv_obj_t* tile = lv_obj_create(parent);
     lv_obj_set_pos(tile, x, y);
@@ -131,7 +130,7 @@ static void build_tile(lv_obj_t* parent, int x, int y, int w, int h, int idx, bo
         lv_obj_set_style_text_font(title, &montserrat_16_cyr, 0);
         lv_obj_set_style_text_color(title, C_DIM, 0);
         lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
-        lv_label_set_text(title, name);
+        lv_label_set_text(title, METRIC_NAMES[g_lang][idx]);
         name_lbl_out = title;
     }
 
@@ -158,34 +157,23 @@ static void build_tile(lv_obj_t* parent, int x, int y, int w, int h, int idx, bo
         lv_obj_align(arc, LV_ALIGN_BOTTOM_MID, 0, -2);
 
         lv_obj_t* val = lv_label_create(arc);
-        lv_obj_set_style_text_font(val, &lv_font_montserrat_24, 0);
+        lv_obj_set_style_text_font(val, &lv_font_montserrat_36, 0);
         lv_obj_set_style_text_color(val, C_OK, 0);
-        lv_obj_align(val, LV_ALIGN_CENTER, 0, -8);
+        lv_obj_align(val, LV_ALIGN_CENTER, 0, -6);
         lv_label_set_text(val, "--");
 
         lv_obj_t* sublbl = lv_label_create(arc);
         lv_obj_set_style_text_font(sublbl, &montserrat_14_cyr, 0);
         lv_obj_set_style_text_color(sublbl, C_DIM, 0);
-        lv_obj_align_to(sublbl, val, LV_ALIGN_OUT_BOTTOM_MID, (idx == 2) ? -14 : 0, 2);
-
-        if (main_style) {
-            // Show "Name Unit" (e.g. "Coolant °C") or just "Name" if no unit
-            char sub[32];
-            if (m.unit[0]) snprintf(sub, sizeof(sub), "%s %s", name, m.unit);
-            else            snprintf(sub, sizeof(sub), "%s", name);
-            lv_label_set_text(sublbl, sub);
-            name_lbl_out = sublbl;
-        } else {
-            lv_label_set_text(sublbl, m.unit);
-            // name_lbl_out stays as the title header
-        }
+        lv_obj_align_to(sublbl, val, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+        lv_label_set_text(sublbl, m.unit);
 
         g_tiles[idx] = { arc, val, name_lbl_out };
     } else {
         lv_obj_t* val = lv_label_create(tile);
-        lv_obj_set_style_text_font(val, &lv_font_montserrat_36, 0);
+        lv_obj_set_style_text_font(val, &lv_font_montserrat_48, 0);
         lv_obj_set_style_text_color(val, C_OK, 0);
-        lv_obj_align(val, LV_ALIGN_CENTER, 0, main_style ? -4 : 8);
+        lv_obj_align(val, LV_ALIGN_CENTER, 0, -6);
         lv_label_set_text(val, "--");
 
         lv_obj_t* ulbl = lv_label_create(tile);
@@ -193,15 +181,6 @@ static void build_tile(lv_obj_t* parent, int x, int y, int w, int h, int idx, bo
         lv_obj_set_style_text_color(ulbl, C_DIM, 0);
         lv_obj_align_to(ulbl, val, LV_ALIGN_OUT_BOTTOM_MID, 0, 3);
         lv_label_set_text(ulbl, m.unit);
-
-        if (main_style) {
-            lv_obj_t* nlbl = lv_label_create(tile);
-            lv_obj_set_style_text_font(nlbl, &montserrat_16_cyr, 0);
-            lv_obj_set_style_text_color(nlbl, C_DIM, 0);
-            lv_obj_align(nlbl, LV_ALIGN_BOTTOM_MID, 0, -2);
-            lv_label_set_text(nlbl, name);
-            name_lbl_out = nlbl;
-        }
 
         g_tiles[idx] = { nullptr, val, name_lbl_out };
     }
@@ -455,18 +434,10 @@ static void build_settings_tab(lv_obj_t* tab, VehicleData* vd) {
 void set_language(Language lang) {
     g_lang = lang;
 
-    // Update metric name labels on all tiles
+    // Update metric name labels on non-main tiles
     for (int i = 0; i < 12; i++) {
         if (!g_tiles[i].name_lbl) continue;
-        const MetricDef& m = METRICS[i];
-        const char* name = METRIC_NAMES[lang][i];
-        char buf[32];
-        // Main-style arc tiles combine "Name Unit" in the sub-label
-        if (i < 4 && m.useArc && m.unit[0])
-            snprintf(buf, sizeof(buf), "%s %s", name, m.unit);
-        else
-            snprintf(buf, sizeof(buf), "%s", name);
-        lv_label_set_text(g_tiles[i].name_lbl, buf);
+        lv_label_set_text(g_tiles[i].name_lbl, METRIC_NAMES[lang][i]);
     }
 
     // Tab bar names — rename tabs in place
