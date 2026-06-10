@@ -311,7 +311,7 @@ static void build_faults_tab(lv_obj_t* tab, VehicleData* vd) {
     lv_obj_set_style_text_font(g_dtc_scope, &montserrat_14_cyr, 0);
     lv_obj_set_style_text_color(g_dtc_scope, lv_color_hex(0x475569), 0);  // darker than C_DIM
     lv_obj_align(g_dtc_scope, LV_ALIGN_TOP_RIGHT, 0, 42);
-    lv_label_set_text(g_dtc_scope, "DME \xc2\xb7 EGS");  // · = U+00B7
+    lv_label_set_text(g_dtc_scope, "DME + EGS");
 
     // Row 2: DTC list — fills remaining space (y=66 to bottom)
     const int dtc_list_y = 66;
@@ -590,5 +590,10 @@ void dashboard_update(const VehicleValues& v) {
     if (v.dtcScanDone && v.dtcCount != g_last_dtccount) {
         g_last_dtccount = v.dtcCount;
         update_dtc_list(v);
+    }
+
+    // If OBD is unavailable the scan will never run — clear any stale "scanning" label
+    if (v.status == OBD_DISCONNECTED && !v.dtcScanDone && g_dtc_status) {
+        lv_label_set_text(g_dtc_status, "");
     }
 }

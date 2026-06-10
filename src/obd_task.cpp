@@ -102,34 +102,6 @@ static int parse_hex_bytes(const char* buf, uint8_t* out, int maxout) {
     return n;
 }
 
-// ── Parse Mode 03 DTC response into VehicleData ────────────────────────────
-static void parse_dtcs(const char* resp, VehicleData* vd) {
-    uint8_t bytes[64];
-    int     n       = parse_hex_bytes(resp, bytes, 64);
-    int     start   = 0;
-
-    // Skip bytes before the 0x43 response header
-    while (start < n && bytes[start] != 0x43) start++;
-    start++;  // move past 0x43
-
-    if (!vd->lock(50)) return;
-    vd->dtcCount = 0;
-    static const char SYS[] = "PCBU";
-    for (int i = start; i + 1 < n && vd->dtcCount < MAX_DTCS; i += 2) {
-        uint8_t b1 = bytes[i], b2 = bytes[i + 1];
-        if (b1 == 0 && b2 == 0) continue;
-        snprintf(vd->dtcCodes[vd->dtcCount++], 8,
-                 "%c%d%X%02X",
-                 SYS[(b1 >> 6) & 3],
-                 (b1 >> 4) & 3,
-                 b1 & 0xF,
-                 b2);
-    }
-    vd->dtcScanDone = true;
-    vd->dtcScanReq  = false;
-    vd->unlock();
-}
-
 // ── Parse UDS Mode 19 (SID 0x19 subfn 0x02) response bytes ─────────────────
 // Returns number of DTCs added, or -1 if no valid 59 02 response was found.
 // Caller must reset dtcCount=0 before the first call for a scan session.
