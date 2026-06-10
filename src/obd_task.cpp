@@ -311,20 +311,19 @@ void obd_task(void* pvParameters) {
             break;
         }
 
-        // ── Read stored DTCs: UDS Mode 19 on DME+EGS, fallback Mode 03 ────
+        // ── Read stored DTCs: UDS Mode 19 on DME+EGS ────────────────────
         case SCAN_DTC: {
+            // AT commands reply in <50ms; 200ms is comfortably safe
             auto uds_at = [&](const char* cmd) {
                 client.print(cmd); client.print("\r");
-                read_prompt(client, resp_buf, sizeof(resp_buf), 500);
+                read_prompt(client, resp_buf, sizeof(resp_buf), 200);
             };
 
             while (client.available()) client.read();
 
-            // UDS setup
             uds_at("AT SP 6");
             uds_at("AT H0");
 
-            // Reset DTC list before accumulating from multiple ECUs
             if (vd->lock(50)) { vd->dtcCount = 0; vd->unlock(); }
 
             // Physical addresses: DME 7E0→7E8, EGS 7E1→7E9 (both R56 and F31)
@@ -333,18 +332,16 @@ void obd_task(void* pvParameters) {
                 { "AT SH 7E1", "AT CRA 7E9" },
             };
 
-            bool any_valid = false;
             for (auto& ecu : ECUS) {
                 uds_at(ecu.sh);
                 uds_at(ecu.cra);
                 client.print("19 02 CF\r");  // ReadDTCByStatusMask, confirmed+pending
-                read_prompt(client, resp_buf, sizeof(resp_buf), 4000);
+                read_prompt(client, resp_buf, sizeof(resp_buf), 2000);
 
                 uint8_t rbuf[256];
                 int n = parse_hex_bytes(resp_buf, rbuf, 256);
                 int result = (n >= 3) ? parse_dtcs_uds(rbuf, n, vd) : -1;
                 Serial.printf("[DTC] Mode19 %s: n=%d result=%d\n", ecu.sh + 6, n, result);
-                if (result >= 0) any_valid = true;
             }
 
             // Restore ELM327 for normal PID polling
@@ -357,17 +354,10 @@ void obd_task(void* pvParameters) {
             while (client.available()) client.read();
             vTaskDelay(pdMS_TO_TICKS(80));
 
-            if (!any_valid) {
-                // Fallback: Mode 03 broadcast (works on most OBD-II vehicles)
-                client.print("03\r");
-                read_prompt(client, resp_buf, sizeof(resp_buf), 3000);
-                parse_dtcs(resp_buf, vd);
-            } else {
-                if (vd->lock(50)) {
-                    vd->dtcScanDone = true;
-                    vd->dtcScanReq  = false;
-                    vd->unlock();
-                }
+            if (vd->lock(50)) {
+                vd->dtcScanDone = true;
+                vd->dtcScanReq  = false;
+                vd->unlock();
             }
 
             poll_idx   = 0;

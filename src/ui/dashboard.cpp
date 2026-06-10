@@ -59,6 +59,7 @@ static TileW     g_tiles[12];
 static lv_obj_t* g_status_lbl    = nullptr;
 static lv_obj_t* g_dtc_list      = nullptr;
 static lv_obj_t* g_dtc_status    = nullptr;
+static lv_obj_t* g_dtc_scope     = nullptr;  // permanent dim hint "DME · EGS only"
 static lv_obj_t* g_scan_lbl      = nullptr;
 static lv_obj_t* g_clear_lbl     = nullptr;
 static lv_obj_t* g_lang_btns[2]  = { nullptr, nullptr };
@@ -304,6 +305,13 @@ static void build_faults_tab(lv_obj_t* tab, VehicleData* vd) {
     lv_obj_set_style_text_color(g_dtc_status, C_DIM, 0);
     lv_obj_align(g_dtc_status, LV_ALIGN_TOP_LEFT, 0, 42);
     lv_label_set_text(g_dtc_status, "");
+
+    // Permanent dim hint reminding which ECUs are covered (right-aligned, same row)
+    g_dtc_scope = lv_label_create(tab);
+    lv_obj_set_style_text_font(g_dtc_scope, &montserrat_14_cyr, 0);
+    lv_obj_set_style_text_color(g_dtc_scope, lv_color_hex(0x475569), 0);  // darker than C_DIM
+    lv_obj_align(g_dtc_scope, LV_ALIGN_TOP_RIGHT, 0, 42);
+    lv_label_set_text(g_dtc_scope, "DME \xc2\xb7 EGS");  // · = U+00B7
 
     // Row 2: DTC list — fills remaining space (y=66 to bottom)
     const int dtc_list_y = 66;
