@@ -30,7 +30,7 @@ struct VehicleValues {
 
     OBDStatus status    = OBD_DISCONNECTED;
 
-    char  dtcCodes[MAX_DTCS][6];  // e.g. "P0128\0"
+    char  dtcCodes[MAX_DTCS][8];  // "P0128\0" (OBD-II) or "D01A08\0" (BMW proprietary)
     int   dtcCount     = 0;
     bool     dtcScanDone = false;   // set by OBD task after scan completes
 

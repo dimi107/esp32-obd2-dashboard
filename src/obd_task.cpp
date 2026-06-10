@@ -118,7 +118,7 @@ static void parse_dtcs(const char* resp, VehicleData* vd) {
     for (int i = start; i + 1 < n && vd->dtcCount < MAX_DTCS; i += 2) {
         uint8_t b1 = bytes[i], b2 = bytes[i + 1];
         if (b1 == 0 && b2 == 0) continue;
-        snprintf(vd->dtcCodes[vd->dtcCount++], 6,
+        snprintf(vd->dtcCodes[vd->dtcCount++], 8,
                  "%c%d%X%02X",
                  SYS[(b1 >> 6) & 3],
                  (b1 >> 4) & 3,
@@ -128,6 +128,41 @@ static void parse_dtcs(const char* resp, VehicleData* vd) {
     vd->dtcScanDone = true;
     vd->dtcScanReq  = false;
     vd->unlock();
+}
+
+// ── Parse UDS Mode 19 (SID 0x19 subfn 0x02) response bytes ─────────────────
+// Returns number of DTCs added, or -1 if no valid 59 02 response was found.
+// Caller must reset dtcCount=0 before the first call for a scan session.
+static int parse_dtcs_uds(const uint8_t* bytes, int n, VehicleData* vd) {
+    // Locate 0x59 0x02 positive response header
+    int start = 0;
+    while (start < n - 1 && !(bytes[start] == 0x59 && bytes[start+1] == 0x02)) start++;
+    if (start >= n - 1) return -1;
+
+    start += 3;  // skip 0x59, 0x02, DTCStatusAvailabilityMask
+
+    if (!vd->lock(50)) return -1;
+
+    int added = 0;
+    static const char SYS[] = "PCBU";
+    while (start + 3 < n && vd->dtcCount < MAX_DTCS) {
+        uint8_t h = bytes[start], m = bytes[start+1], l = bytes[start+2];
+        start += 4;  // 3-byte DTC + 1-byte status
+        if (h == 0 && m == 0 && l == 0) continue;
+
+        if (h == 0x00) {
+            // ISO 15031-6 standard OBD-II code (P/C/B/U prefix from mid byte)
+            snprintf(vd->dtcCodes[vd->dtcCount++], 8,
+                     "%c%d%X%02X",
+                     SYS[(m >> 6) & 3], (m >> 4) & 3, m & 0xF, l);
+        } else {
+            // BMW/manufacturer-specific: display as 6-digit hex (e.g. "D01A08")
+            snprintf(vd->dtcCodes[vd->dtcCount++], 8, "%02X%02X%02X", h, m, l);
+        }
+        added++;
+    }
+    vd->unlock();
+    return added;
 }
 
 // ── Main task ──────────────────────────────────────────────────────────────
@@ -276,28 +311,78 @@ void obd_task(void* pvParameters) {
             break;
         }
 
-        // ── Read stored DTCs (Mode 03) ────────────────────────────────────
+        // ── Read stored DTCs: UDS Mode 19 on DME+EGS, fallback Mode 03 ────
         case SCAN_DTC: {
-            client.print("03\r");
-            read_prompt(client, resp_buf, sizeof(resp_buf), 3000);
-            parse_dtcs(resp_buf, vd);
+            auto uds_at = [&](const char* cmd) {
+                client.print(cmd); client.print("\r");
+                read_prompt(client, resp_buf, sizeof(resp_buf), 500);
+            };
+
+            while (client.available()) client.read();
+
+            // UDS setup
+            uds_at("AT SP 6");
+            uds_at("AT H0");
+
+            // Reset DTC list before accumulating from multiple ECUs
+            if (vd->lock(50)) { vd->dtcCount = 0; vd->unlock(); }
+
+            // Physical addresses: DME 7E0→7E8, EGS 7E1→7E9 (both R56 and F31)
+            struct { const char* sh; const char* cra; } ECUS[] = {
+                { "AT SH 7E0", "AT CRA 7E8" },
+                { "AT SH 7E1", "AT CRA 7E9" },
+            };
+
+            bool any_valid = false;
+            for (auto& ecu : ECUS) {
+                uds_at(ecu.sh);
+                uds_at(ecu.cra);
+                client.print("19 02 CF\r");  // ReadDTCByStatusMask, confirmed+pending
+                read_prompt(client, resp_buf, sizeof(resp_buf), 4000);
+
+                uint8_t rbuf[256];
+                int n = parse_hex_bytes(resp_buf, rbuf, 256);
+                int result = (n >= 3) ? parse_dtcs_uds(rbuf, n, vd) : -1;
+                Serial.printf("[DTC] Mode19 %s: n=%d result=%d\n", ecu.sh + 6, n, result);
+                if (result >= 0) any_valid = true;
+            }
+
+            // Restore ELM327 for normal PID polling
+            uds_at("AT D");
+            uds_at("AT E0");
+            uds_at("AT L0");
+            uds_at("AT H0");
+            uds_at("AT S1");
+            uds_at("AT SP 0");
+            while (client.available()) client.read();
+            vTaskDelay(pdMS_TO_TICKS(80));
+
+            if (!any_valid) {
+                // Fallback: Mode 03 broadcast (works on most OBD-II vehicles)
+                client.print("03\r");
+                read_prompt(client, resp_buf, sizeof(resp_buf), 3000);
+                parse_dtcs(resp_buf, vd);
+            } else {
+                if (vd->lock(50)) {
+                    vd->dtcScanDone = true;
+                    vd->dtcScanReq  = false;
+                    vd->unlock();
+                }
+            }
+
             poll_idx   = 0;
             fast_phase = 0;
             state      = POLL;
             break;
         }
 
-        // ── Clear DTCs (Mode 04) then re-scan ────────────────────────────
+        // ── Clear DTCs (Mode 04) then re-scan via SCAN_DTC ───────────────
         case CLEAR_DTC: {
             client.print("04\r");
             read_prompt(client, resp_buf, sizeof(resp_buf), 3000);
-            client.print("03\r");
-            read_prompt(client, resp_buf, sizeof(resp_buf), 3000);
-            parse_dtcs(resp_buf, vd);
             if (vd->lock()) { vd->dtcClearReq = false; vd->unlock(); }
-            poll_idx   = 0;
-            fast_phase = 0;
-            state      = POLL;
+            // Re-scan to confirm cleared; SCAN_DTC handles all state cleanup
+            state = SCAN_DTC;
             break;
         }
 
